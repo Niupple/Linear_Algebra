@@ -1,7 +1,7 @@
-/* Copyright dyj (c) 2017
+/* Copyright dyj (c) 2018
  * any codes cannot be used for business
  * template for project special
- * updated on 2017/10/13
+ * updated on 2018/1/2
  *
  * Introductions:
  *	class la_vector:
@@ -12,7 +12,7 @@
  *						true	row vector
  *		public members:
  *			ROW,COLUMN	constant flag for constructing vectors
- *			transform()	to transform this function and return its reference
+ *			transpose()	to transpose this function and return its reference
  *			row()		to return if the vector is a row vector
  *			dimention()	to return the dimention of the vector
  *
@@ -21,23 +21,29 @@
  *			_row,_column	storing the number of rows/columns of the matrix
  *			_mat			storing the matrix itself
  *		public members:
- *			transform()	to transform the matrix and return its reference
+ *			transpose()	to transpose the matrix and return its reference
  *			column()
  *			row()		to return the number of columns/rows of the matrix
  *			row_exchange(_i, _j)		to exchange the row of _i and _j
+ *			row_exchange_step(_i, _j)	to print the step
  *			row_time(_i, _k)			to make each element on row _i time _k
+ *			row_time_step(_i, _k)		...
  *			row_time_plus(_i, _k, _j)	to add _k times of row _i to row _j
+ *			row_time_plus_step(_i, _k, _j) ...
  *			operator []	to return the certian row in the matrix, range: [1, _row]
  *						WARNING never access the _mat directly, that will make
  *						the program insanely chaotic, for the index of this []
  *						is actually different from that of _mat
  *		functions related:
  *			stairlize(_mat, _row_start, _column_start)
- *						to make _mat a stair matrix row equivalent to the original
+ *						to make _mat a echelon form row equivalent to the original
  *						one. Directly modify on _mat
+ *			diagonalize(_mat)
+ *						to make _mat to a reduced echelon form
  * */
 #include <cstdio>
 #include <iostream>
+#include <sstream>
 #include <algorithm>
 #include <vector>
 #include "rational.h"
@@ -85,8 +91,8 @@ namespace lnr {
 			friend T operator * (const la_vector&, const la_vector&);	//times a number
 
 			//functions
-			//la_vector transform() const;	//return the copy of the transformred vector
-			la_vector &transform();		//transform this vector
+			//la_vector transpose() const;	//return the copy of the transformred vector
+			la_vector &transpose();		//transpose this vector
 			bool row() const;
 			int dimention() const;
 	};
@@ -142,17 +148,21 @@ namespace lnr {
 			friend matrix operator * (const matrix &, const T &);
 
 			//functions
-			matrix &transform();
+			matrix &transpose();
 			int column() const;
 			int row() const;
 			int first_nzero(int _row) const;
 			bool stairlized() const;	//returning if this is a stairlized matrix
 			int rank() const;	//returning the rank of this matrix
+			void print() const;
 
 			//row transformation
 			matrix &row_exchange(const int &_i, const int &_j);
+			matrix &row_exchange_step(const int &_i, const int &_j);
 			matrix &row_time(const int &_i, const T &_k);
+			matrix &row_time_step(const &_i, const T &_k);
 			matrix &row_time_plus(const int &_i, const T &_k, const int &_j);
+			matrix &row_time_plus_step(const int &_i, const T &_k, const int &_j);
 			matrix stair() const;	//returning a copy of stairlized matrix
 	};
 
@@ -161,7 +171,9 @@ namespace lnr {
 
 	//declaration of functions related
 	void stairlize(matrix &_mat, int _row_start = 1, int _column_start = 1);
+	void stairlize_step(matrix &_mat, int _row_start = 1, int _column_start = 1);
 	void diagonalize(matrix &_mat);
+	void diagonalize_step(matrix &_mat);
 	la_vector solve(const matrix &_mat);
 
 	//definition of the menber functions of la_vector
@@ -296,7 +308,7 @@ namespace lnr {
 	}
 
 	//functions
-	la_vector &la_vector::transform() {		//transform this vector
+	la_vector &la_vector::transpose() {		//transpose this vector
 		is_row = !is_row;
 		return *this;
 	}
@@ -310,6 +322,7 @@ namespace lnr {
 	}
 
 	//definition of the member functions of matrix
+	//constructors
 	matrix::matrix(const matrix &other) {
 		_row = other.row();
 		_column = other.column();
@@ -354,6 +367,7 @@ namespace lnr {
 		}
 	}
 
+	/*
 	matrix::matrix(const int &row, const int &column, T **array) {
 		_row = row;
 		_column = column;
@@ -365,6 +379,7 @@ namespace lnr {
 			}
 		}
 	}
+	*/
 
 	//assignments
 	matrix &matrix::operator += (const matrix &b) {
@@ -432,7 +447,19 @@ namespace lnr {
 		return ret;
 	}
 
-	//matrix operator * (const matrix &, const matrix &); TODO
+	matrix operator * (const matrix &a, const matrix &b) {
+		matrix ret(a.row(), b.column());
+		if(a.column() == b.row()) {
+			for(int i = 1; i <= a.row(); ++i) {
+				for(int j = 1; j <= b.column(); ++j) {
+					for(int k = 1; k <= a.column(); ++k) {
+						ret[i][j] += a[i][k]*b[k][j];
+					}
+				}
+			}
+		}
+		return ret;
+	}
 	
 	matrix operator * (const T &k, const matrix &a) {
 		matrix ret(a);
@@ -447,7 +474,7 @@ namespace lnr {
 	}
 
 	//functions
-	matrix &matrix::transform() {
+	matrix &matrix::transpose() {
 		int bigger = max(_row, _column);
 		swap(_row, _column);
 		_mat.resize(bigger);
@@ -510,12 +537,43 @@ namespace lnr {
 		return ret;
 	}
 
+	void matrix::print() const {
+		int row = _row, column = _column, width = -1;
+		string ans[row][column];
+		for(int i = 1; i <= row; ++i) {
+			for(int j = 1; j <= column; ++j) {
+				ostringstream is;
+				is << (*this)[i][j];
+				//is >> ans[i][j];
+				ans[i-1][j-1] = is.str();
+				width = max(width, (int)ans[i-1][j-1].size());
+			}
+		}
+		width++;
+		for(int i = 1; i <= row; ++i) {
+			for(int j = 1; j <= column; ++j) {
+				cout << setw(width) << ans[i-1][j-1];
+			}
+			cout << endl;
+		}
+	}
+
 	//row transformation
 	matrix &matrix::row_exchange(const int &i, const int &j) {
 		if(i < 0 || j < 0 || i > _row || j > _row) {
 			return matrix_dimention_error;	//error
 		}
 		swap((*this)[i], (*this)[j]);
+		return *this;
+	}
+
+	matrix &matrix::row_exchange_step(const int &i, const &j) {
+		if(i < 0 || j < 0 || i > _row || j > _row) {
+			return matrix_dimention_error;	//error
+		}
+		swap((*this)[i], (*this)[j]);
+		cout << "R:\t(r" << i << ", r" << j << ")" << endl;
+		print();
 		return *this;
 	}
 
@@ -529,6 +587,18 @@ namespace lnr {
 		return *this;
 	}
 
+	matrix &matrix::row_time_step(const int &r, const T &k) {
+		if(r < 0 || r > _row) {
+			return matrix_dimention_error;	//error
+		}
+		for(int i = 1; i <= _column; ++i) {
+			(*this)[r][i] *= k;
+		}
+		cout << "R:\t" << k << "*r" << r << endl;
+		print();
+		return *this;
+	}
+
 	matrix &matrix::row_time_plus(const int &r, const T &k, const int &s) {
 		if(r <= 0 || s <= 0 || r > _row || s > _row) {
 			return matrix_dimention_error;	//error
@@ -536,6 +606,18 @@ namespace lnr {
 		for(int i = 1; i <= _column; ++i) {
 			(*this)[s][i] += (*this)[r][i]*k;
 		}
+		return *this;
+	}
+
+	matrix &matrix::row_time_plus_step(const int &r, const T &k, const int &s) {
+		if(r <= 0 || s <= 0 || r > _row || s > _row) {
+			return matrix_dimention_error;	//error
+		}
+		for(int i = 1; i <= _column; ++i) {
+			(*this)[s][i] += (*this)[r][i]*k;
+		}
+		cout << "R:\t" << k << "*r" << r << "+r" << s << endl;
+		print();
 		return *this;
 	}
 
@@ -572,15 +654,53 @@ namespace lnr {
 		stairlize(mat, rs+1, cs+1);
 	}
 
+	void stairlize_step(matrix &mat, int rs, int cs) {
+		if(rs > mat.row() || cs > mat.column()) {
+			return;
+		}
+		bool done = true;
+		int row = mat.row();
+		for(int i = rs; i <= row; ++i) {
+			if(mat[i][cs] != 0) {
+				done = false;
+				//swap(mat[i][cs], mat[rs][cs]);
+				mat.row_exchange_step(i, rs);
+				break;
+			}
+		}
+		if(done) {
+			stairlize_step(mat, rs, cs+1);
+			return;
+		}
+		mat.row_time_step(rs, 1/mat[rs][cs]);
+		for(int i = rs+1; i <= row; ++i) {
+			mat.row_time_plus_step(rs, -mat[i][cs], i);
+		}
+		stairlize_step(mat, rs+1, cs+1);
+	}
+
 	void diagonalize(matrix &mat) {
 		if(!mat.stairlized()) {
 			stairlize(mat);
 		}
 		int head;
-		for(int i = rank(); i >= 0; --i) {
-			head = first_nzero(i);
-			for(int j = i-1; j >= 0; --j) {
-				row_time_plus(i, (*this)[j][head]*(-1), j);
+		for(int i = mat.rank(); i > 0; --i) {
+			head = mat.first_nzero(i);
+			for(int j = i-1; j > 0; --j) {
+				mat.row_time_plus(i, mat[j][head]*(-1), j);
+			}
+		}
+	}
+
+	void diagonalize_step(matrix &mat) {
+		if(!mat.stairlized()) {
+			stairlize_step(mat);
+		}
+		int head;
+		for(int i = mat.rank(); i > 0; --i) {
+			head = mat.first_nzero(i);
+			for(int j = i-1; j > 0; --j) {
+				mat.row_time_plus_step(i, mat[j][head]*(-1), j);
 			}
 		}
 	}
