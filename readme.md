@@ -78,4 +78,4 @@ rat::rational   ra(3),                  //正确，ra的值将等于3
 
 #### 输入、输出
 
-
+`rational`
