@@ -936,9 +936,7 @@ namespace lnr {
 	}
 
 	matrix &row_reduce(matrix &mat) {
-		if(!mat.row_echelon()) {
-			row_eliminate(mat);
-		}
+		row_eliminate(mat);
 		int head;
 		for(int i = mat.rank(); i > 0; --i) {
 			head = mat.row_pivot(i);
